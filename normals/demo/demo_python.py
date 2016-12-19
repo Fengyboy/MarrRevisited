@@ -4,70 +4,67 @@ import matplotlib.pylab as pylab
 import matplotlib.cm as cm
 import scipy.misc
 import Image
+from skimage.io import imread, imsave
 import scipy.io
 import os
+import argparse
 
 import sys
 # Make sure that caffe is on the python path:
-caffe_root = '../../'  # this file is expected to be in {caffe_root}/examples/hed/
+caffe_root = '../../caffe'
 sys.path.insert(0, caffe_root + 'python')
 
 import caffe
 
+cnn_input_size = 224
+crop_height = 224
+crop_width = 224
+image_mean = np.array((104.00698793, 116.66876762, 122.67891434))
 
-data_root = '../../data/HED-BSDS/'
-with open(data_root+'test.lst') as f:
-    test_lst = f.readlines()
-
-test_lst = [data_root+x.strip() for x in test_lst]
-
-im_lst = []
-for i in range(0, len(test_lst)):
-    im = Image.open(test_lst[i])
-    in_ = np.array(im, dtype=np.float32)
-    in_ = in_[:, :, ::-1]
-    in_ -= np.array((104.00698793, 116.66876762, 122.67891434))
-    im_lst.append(in_)
+img_data = ['img_000001.jpg', 'img_000002.jpg']
 
 
-# Visualization
-def plot_single_scale(scale_lst, size):
-    pylab.rcParams['figure.figsize'] = size, size/2
+if __name__ == "__main__":
+    # remove the following two lines if testing with cpu
+    caffe.set_mode_gpu()
+    caffe.set_device(0)
 
-    plt.figure()
-    for i in range(0, len(scale_lst)):
-        s = plt.subplot(1, 5, i+1)
-        plt.imshow(1-scale_lst[i], cmap=cm.Greys_r)
-        s.set_xticklabels([])
-        s.set_yticklabels([])
-        s.yaxis.set_ticks_position('none')
-        s.xaxis.set_ticks_position('none')
-    plt.tight_layout()
+    # netowrk specification files
+    deploy_file = '../net/conv/deploy.prototxt'
+    model_file = '../cachedir/surface_normal_models/best_model.caffemodel'
 
+    # Load the network for testing
+    net = caffe.Net(deploy_file, model_file, caffe.TEST)
 
-idx = 1
+    for i in range(len(img_data)):
+        in_ = imread(os.path.join(os.path.dirname(__file__), img_data[i]))
+        in_ = in_.transpose((2, 0, 1))
+        # shape for input (data blob is N x C x H x W), set data
+        net.blobs['data'].reshape(1, *in_.shape)
+        net.blobs['data'].data[...] = in_
+        # run net and take argmax for prediction
+        net.forward()
+        out1 = net.blobs['sigmoid-dsn1'].data[0][0, :, :]
+        out2 = net.blobs['sigmoid-dsn2'].data[0][0, :, :]
+        out3 = net.blobs['sigmoid-dsn3'].data[0][0, :, :]
+        out4 = net.blobs['sigmoid-dsn4'].data[0][0, :, :]
+        out5 = net.blobs['sigmoid-dsn5'].data[0][0, :, :]
+        fuse = net.blobs['sigmoid-fuse'].data[0][0, :, :]
 
-in_ = im_lst[idx]
-in_ = in_.transpose((2, 0, 1))
-# remove the following two lines if testing with cpu
-caffe.set_mode_gpu()
-caffe.set_device(0)
-# load net
-model_root = './'
-net = caffe.Net(model_root+'deploy.prototxt', model_root+'hed_pretrained_bsds.caffemodel', caffe.TEST)
-# shape for input (data blob is N x C x H x W), set data
-net.blobs['data'].reshape(1, *in_.shape)
-net.blobs['data'].data[...] = in_
-# run net and take argmax for prediction
-net.forward()
-out1 = net.blobs['sigmoid-dsn1'].data[0][0, :, :]
-out2 = net.blobs['sigmoid-dsn2'].data[0][0, :, :]
-out3 = net.blobs['sigmoid-dsn3'].data[0][0, :, :]
-out4 = net.blobs['sigmoid-dsn4'].data[0][0, :, :]
-out5 = net.blobs['sigmoid-dsn5'].data[0][0, :, :]
-fuse = net.blobs['sigmoid-fuse'].data[0][0, :, :]
+        out_dir = os.path.join(args.output_dir, image_names[idx])
+        if not os.path.exists(out_dir):
+            os.mkdir(out_dir)
+        out_name1 = os.path.join(out_dir, 'hed_gradient_image_out1.tiff')
+        out_name2 = os.path.join(out_dir, 'hed_gradient_image_out2.tiff')
+        out_name3 = os.path.join(out_dir, 'hed_gradient_image_out3.tiff')
+        out_name4 = os.path.join(out_dir, 'hed_gradient_image_out4.tiff')
+        out_name5 = os.path.join(out_dir, 'hed_gradient_image_out5.tiff')
+        fuse_name = os.path.join(out_dir, 'hed_gradient_image.tiff')
 
-scale_lst = [fuse]
-plot_single_scale(scale_lst, 22)
-scale_lst = [out1, out2, out3, out4, out5]
-plot_single_scale(scale_lst, 10)
+        print(out_dir)
+        imsave(out_name1, out1)
+        imsave(out_name2, out2)
+        imsave(out_name3, out3)
+        imsave(out_name4, out4)
+        imsave(out_name5, out5)
+        imsave(fuse_name, fuse)
