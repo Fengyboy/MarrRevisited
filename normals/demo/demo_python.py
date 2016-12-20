@@ -1,13 +1,7 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.pylab as pylab
-import matplotlib.cm as cm
-import scipy.misc
 import Image
-from skimage.io import imread, imsave
-import scipy.io
 import os
-import argparse
+import math
 
 import sys
 # Make sure that caffe is on the python path:
@@ -37,34 +31,20 @@ if __name__ == "__main__":
     net = caffe.Net(deploy_file, model_file, caffe.TEST)
 
     for i in range(len(img_data)):
-        in_ = imread(os.path.join(os.path.dirname(__file__), img_data[i]))
-        in_ = in_.transpose((2, 0, 1))
-        # shape for input (data blob is N x C x H x W), set data
-        net.blobs['data'].reshape(1, *in_.shape)
-        net.blobs['data'].data[...] = in_
+        img = Image.open(os.path.join(os.path.dirname(__file__), img_data[i]))
+
+        img_tmp = img.resize((cnn_input_size, cnn_input_size), resample=Image.LANCZOS)
+        img_tmp = np.array(img_tmp) - image_mean
+        img_tmp = img_tmp.transpose((2, 0, 1))
+
+        snd = (1 / math.sqrt(3)) * np.ones((cnn_input_size + 200, cnn_input_size + 200, 3))
+        depd = np.zeros((cnn_input_size + 200, cnn_input_size + 200))
+
+        net.blobs('data0').reshape((crop_height + 200, crop_width + 200, 3, 1))
+        net.blobs('data1').reshape((crop_height + 200, crop_width + 200, 3, 1))
+        net.blobs('data2').reshape((crop_height + 200, crop_width + 200, 1, 1))
+        import pdb
+        pdb.set_trace()
+
         # run net and take argmax for prediction
         net.forward()
-        out1 = net.blobs['sigmoid-dsn1'].data[0][0, :, :]
-        out2 = net.blobs['sigmoid-dsn2'].data[0][0, :, :]
-        out3 = net.blobs['sigmoid-dsn3'].data[0][0, :, :]
-        out4 = net.blobs['sigmoid-dsn4'].data[0][0, :, :]
-        out5 = net.blobs['sigmoid-dsn5'].data[0][0, :, :]
-        fuse = net.blobs['sigmoid-fuse'].data[0][0, :, :]
-
-        out_dir = os.path.join(args.output_dir, image_names[idx])
-        if not os.path.exists(out_dir):
-            os.mkdir(out_dir)
-        out_name1 = os.path.join(out_dir, 'hed_gradient_image_out1.tiff')
-        out_name2 = os.path.join(out_dir, 'hed_gradient_image_out2.tiff')
-        out_name3 = os.path.join(out_dir, 'hed_gradient_image_out3.tiff')
-        out_name4 = os.path.join(out_dir, 'hed_gradient_image_out4.tiff')
-        out_name5 = os.path.join(out_dir, 'hed_gradient_image_out5.tiff')
-        fuse_name = os.path.join(out_dir, 'hed_gradient_image.tiff')
-
-        print(out_dir)
-        imsave(out_name1, out1)
-        imsave(out_name2, out2)
-        imsave(out_name3, out3)
-        imsave(out_name4, out4)
-        imsave(out_name5, out5)
-        imsave(fuse_name, fuse)
